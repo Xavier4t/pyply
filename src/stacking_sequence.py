@@ -34,13 +34,16 @@ parser= argparse.ArgumentParser()
 # Number of plies in each stacking sequence
 NUM_PLIES = parser.add_argument('--num_plies', type=int, required=True, help="int: number of plies in the stacking sequence")
 
-
+# Mutation rate for the mutate function
+MUTATION_RATE = parser.add_argument('--mut_rate', type=int, required=False, help="float: mutation rate for the mutate function")
 # Population size and the number of iterations
 POP_SIZE = parser.add_argument('--pop_size', type=int, required=False, help="int: maximum number of stackings generated")
 NUM_ITERATIONS = parser.add_argument('--num_iter', type=int, required=False, help="int: maximum number of iterations")
 
 # Parse the argument
 args=parser.parse_args()
+if not args.mut_rate:
+    MUTATION_RATE=.1
 if not args.pop_size:
     POP_SIZE = 100
 if not args.num_iter:
@@ -65,7 +68,6 @@ def fitness(seq):
     group_lengths = [len(list(group)) for key, group in groupby(seq, key=lambda ply: ply[1])]
     if max(group_lengths) > 1:
         return float('-inf')
-
 
     # 4. Alternate +θ° and -θ° plies except for the closest ply on either side of the mid-plane
     if seq[NUM_PLIES//2-1][1] == seq[NUM_PLIES//2][1] or seq[NUM_PLIES//2][1] == seq[NUM_PLIES//2+1][1]:
