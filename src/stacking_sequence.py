@@ -2,6 +2,7 @@ import random
 import numpy as np
 import argparse
 from itertools import groupby
+
 """
 Reference: 
 Michael Chun-Yu Niu, Michael Niu, "Composite Airframe Structures", Hong Kong Conmilit Press Ltd. (2005)
@@ -29,10 +30,11 @@ Summary of Stacking Sequence Design Considerations:
     - reduce the % of 0° plies
     - reduce of Poisson's ration is critical in bonded parts"
 """
+
 parser= argparse.ArgumentParser()
 
 # Number of plies in each stacking sequence
-NUM_PLIES = parser.add_argument('--num_plies', type=int, required=True, help="int: number of plies in the stacking sequence")
+NUM_PLIES = parser.add_argument('--num_plies', required=True, help="int: number of plies in the stacking sequence")
 
 # Mutation rate for the mutate function
 MUTATION_RATE = parser.add_argument('--mut_rate', type=int, required=False, help="float: mutation rate for the mutate function")
@@ -48,6 +50,7 @@ if not args.pop_size:
     POP_SIZE = 100
 if not args.num_iter:
     NUM_ITERATIONS=1000
+
 
 # Fitness function
 def fitness(seq):
@@ -111,3 +114,62 @@ def fitness(seq):
                 return float('-inf')
             if seq[i+1][1] != 45 or seq[i+2][1] != -45 or seq[i+3][1] != 45:
                 return float('-inf')
+            
+    return sum(ply[0] for ply in seq)  # return the sum
+
+# Mutation function
+def mutate(seq):
+    for i in range(NUM_PLIES):
+        if random.random() < MUTATION_RATE:
+            seq[i] = (random.uniform(0, 1), seq[i][1])
+    return seq
+
+def select_parents(population, fitnesses):
+    total_fitness = sum(fitnesses)
+    probs = [fit/total_fitness for fit in fitnesses]
+    parent1_idx = random.choices(range(POP_SIZE), weights=probs)[0]
+    parent2_idx = random.choices(range(POP_SIZE), weights=probs)[0]
+    return population[parent1_idx], population[parent2_idx]
+
+# Crossover function
+def crossover(parent1, parent2):
+    # Choose a random midpoint
+    midpoint = random.randint(1, NUM_PLIES-1)
+    # Swap the sub-sequences
+    child1 = parent1[:midpoint] + parent2[midpoint:]
+    child2 = parent2[:midpoint] + parent1[midpoint:]
+    return child1, child2
+
+# Generate the initial stacking sequence population
+def generate_initial_population():
+    population = []
+    for i in range(POP_SIZE):
+        seq = []
+        for j in range(NUM_PLIES):
+            ply = (random.uniform(0, 1), j % 4)
+            seq.append(ply)
+        population.append(seq)
+    return population
+
+# Find the best stacking sequence
+def genetic_algorithm():
+    population = generate_initial_population()
+    for i in range(NUM_ITERATIONS):
+        fitnesses = [fitness(seq) for seq in population]
+        best_fitness = max(fitnesses)
+        best_seq = population[fitnesses.index(best_fitness)]
+        print(f'Generation {i+1}: Best Fitness = {best_fitness:.2f}')
+
+        next_population = [best_seq]
+        for j in range(POP_SIZE-1):
+            parent1, parent2 = select_parents(population, fitnesses)
+            child = crossover(parent1, parent2)
+            child = mutate(child)
+            next_population.append(child)
+        population = next_population
+
+    return best_seq
+
+if __name__=="__main__":
+    best_seq = genetic_algorithm()
+    print('Best Sequence:', best_seq)
