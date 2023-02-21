@@ -64,7 +64,7 @@ else:
     NUM_ITERATIONS = 1000
 
 # fitness function
-
+# Note: symmetry needs to be enforced
 def fitness_function(sequence):
     # Calculate the percentage of each orientation
     counts = {o: sequence.count(o) for o in DesignParameters.orientations}
