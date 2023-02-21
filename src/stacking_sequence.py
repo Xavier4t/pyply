@@ -38,30 +38,20 @@ parser= argparse.ArgumentParser()
 parser.add_argument('--num_plies', type=int, required=True, help="int: number of plies in the stacking sequence")
 
 # Mutation and Crossover rate 
-parser.add_argument('--mut_rate', type=np.float64, required=False, help="float: mutation rate")
-parser.add_argument('--cross_rate', type=np.float64, required=False, help="float: crossover rate")
+parser.add_argument('--mut_rate', type=np.float64, required=False, default=.1, help="float: mutation rate")
+parser.add_argument('--cross_rate', type=np.float64, required=False, default=.7, help="float: crossover rate")
 
 # Population size, max number of iterations
-parser.add_argument('--pop_size', type=int, required=False, help="int: maximum number of stackings generated")
-parser.add_argument('--num_iter', type=int, required=False, help="int: maximum number of iterations")
+parser.add_argument('--pop_size', type=int, required=False, default=100, help="int: maximum number of stackings generated")
+parser.add_argument('--num_iter', type=int, required=False, default=1000, help="int: maximum number of iterations")
 
 # Parse the argument
 args=parser.parse_args()
-if args.num_plies:
-    NUM_PLIES = int(args.num_plies)
-if args.mut_rate:
-    MUTATION_RATE = np.float64(args.mut_rate)
-elif args.cross_rate:
-    CROSSOVER_RATE = np.float64(args.cross_over)
-elif args.pop_size:
-    POP_SIZE = int(args.pop_size)
-elif args.num_iter:
-    NUM_ITERATIONS = int(args.num_iter)
-else:
-    MUTATION_RATE=.1
-    CROSSOVER_RATE=.7
-    POP_SIZE = 100
-    NUM_ITERATIONS = 1000
+NUM_PLIES = int(args.num_plies)
+MUTATION_RATE = np.float64(args.mut_rate)
+CROSSOVER_RATE = np.float64(args.cross_rate)
+POP_SIZE = int(args.pop_size)
+NUM_ITERATIONS = int(args.num_iter)
 
 # fitness function
 # Note: symmetry needs to be enforced
