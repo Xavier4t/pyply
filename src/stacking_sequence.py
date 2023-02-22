@@ -42,7 +42,7 @@ parser.add_argument('--mut_rate', type=np.float64, required=False, default=.1, h
 parser.add_argument('--cross_rate', type=np.float64, required=False, default=.7, help="float: crossover rate")
 
 # Population size, max number of iterations
-parser.add_argument('--pop_size', type=int, required=False, default=100, help="int: maximum number of stackings generated")
+parser.add_argument('--pop_size', type=int, required=False, default=150, help="int: maximum number of stackings generated")
 parser.add_argument('--num_iter', type=int, required=False, default=1000, help="int: maximum number of iterations")
 
 # Parse the argument
@@ -56,14 +56,20 @@ NUM_ITERATIONS = int(args.num_iter)
 # fitness function
 # Note: symmetry needs to be enforced
 def fitness_function(sequence):
-    # Calculate the percentage of each orientation
+    # Rule 1: Symmetry check respect to mid-plane
+    symmetry_penalty = 0
+    for i in range(len(sequence)//2):
+        if sequence[i] != sequence[-i-1]:
+            symmetry_penalty += 1
+
+    # Rule 2: Calculate the percentage of each orientation
     counts = {o: sequence.count(o) for o in DesignParameters.orientations}
     for o in DesignParameters.orientations:
         if counts[o] / len(sequence) < DesignParameters.min_percentage:
             return 0
     percentages = {o: counts[o] / len(sequence) for o in DesignParameters.orientations}
     
-    # Calculate the number of groupings of plies with the same orientation
+    # Rule 3: Calculate the number of groupings of plies with the same orientation
     groups = 0
     last_orientation = None
     group_size = 0
@@ -76,7 +82,7 @@ def fitness_function(sequence):
             group_size = 1
     groups += max(0, group_size - 1)
     
-    # Calculate the imbalance between 0° and 90°
+    # Rule 4: Calculate the imbalance between 0° and 90°
     imbalance = abs(counts[0] - counts[90])
     
     # Rule 5: Penalize plies with fibers perpendicular to a free edge at the mid-plane
@@ -137,80 +143,72 @@ def fitness_function(sequence):
                 surface_penalty += 1
     
     # Calculate the fitness value
-    fitness = 1 / (1 + percentages[0] + percentages[45] + percentages[-45] + percentages[90] + groups +
+    fitness = 1 / (1 + symmetry_penalty*2 + percentages[0] + percentages[45] + percentages[-45] + percentages[90] + groups +
                    imbalance + edge_penalty + grouping_penalty + surface_penalty)
 
     return fitness
 
 # Mutation Function:
-def mutate(sequence, mut_rate):
+def mutate(sequence, mut_rate, n_plies):
     mutated_seq = sequence.copy()
     
-    # Rule 1: Swap adjacent plies
-    i = np.random.randint(len(sequence)-1)
-    mutated_seq[i], mutated_seq[i+1] = mutated_seq[i+1], mutated_seq[i]
-    
-    # Rule 2: Randomly choose an orientation from the available orientations
-    i = np.random.randint(len(sequence))
-    mutated_seq[i] = np.random.choice(DesignParameters.orientations)
-    
-    # Rule 3: Move a 90° ply to the end of the sequence
-    i = np.random.randint(len(sequence))
-    mutated_seq.insert(i, np.random.choice(DesignParameters.orientations))
-    
-    # Rule 4: Move a 0° ply to the middle of the sequence
-    if np.random.random() < mut_rate and 0 in sequence:
-        mutated_seq.remove(0)
-        middle = len(mutated_seq) // 2
-        mutated_seq.insert(middle, 0)
-    
-    # Rule 5: Swap ply at the mid-plane with ply 45° off-axis
-    mid_plane = len(sequence) // 2
-    if abs(mutated_seq[mid_plane]) == 90:
-        if np.random.random() < mut_rate and 45 in sequence:
-            for i in range(mid_plane+1, len(sequence)):
-                if mutated_seq[i] == 45:
-                    mutated_seq[mid_plane], mutated_seq[i] = mutated_seq[i], mutated_seq[mid_plane]
-                    break
-        else:
-            for i in reversed(range(mid_plane)):
-                if abs(mutated_seq[i]) == 45:
-                    mutated_seq[mid_plane], mutated_seq[i] = mutated_seq[i], mutated_seq[mid_plane]
-                    break
-                    
-    # Rule 6: Swap closest plies to mid-plane that are both +45° or -45°
-    if np.random.random() < mut_rate:
-        for i in range(mid_plane-1):
-            if abs(mutated_seq[i]) == abs(mutated_seq[i+1]):
-                mutated_seq[i], mutated_seq[i+1] = mutated_seq[i+1], mutated_seq[i]
-                break
-        for i in reversed(range(mid_plane+1, len(sequence)-1)):
-            if abs(mutated_seq[i]) == abs(mutated_seq[i+1]):
-                mutated_seq[i], mutated_seq[i+1] = mutated_seq[i+1], mutated_seq[i]
-                break
-    
-    # Rule 7: Separate groups of tape plies of the same orientation with 45° plies
-    for i in range(1, len(sequence)-1):
-        if mutated_seq[i] == mutated_seq[i-1] and mutated_seq[i] == mutated_seq[i+1]:
-            if abs(mutated_seq[i-1]) + abs(mutated_seq[i+1]) == 90:
-                if mutated_seq[i] == 0:
+    # Check if the sequence is already at its maximum length
+    if len(mutated_seq) == n_plies:
+        # Rule 1: Swap adjacent plies
+        i = np.random.randint(len(sequence)-1)
+        mutated_seq[i], mutated_seq[i+1] = mutated_seq[i+1], mutated_seq[i]
+
+        # Rule 2: Randomly choose an orientation from the available orientations
+        i = np.random.randint(len(sequence))
+        mutated_seq[i] = np.random.choice(DesignParameters.orientations)
+
+        # Rule 5: Swap ply at the mid-plane with ply 45° off-axis
+        mid_plane = len(sequence) // 2
+        if abs(mutated_seq[mid_plane]) == 90:
+            if np.random.random() < mut_rate and 45 in sequence:
+                for i in range(mid_plane+1, len(sequence)):
+                    if mutated_seq[i] == 45:
+                        mutated_seq[mid_plane], mutated_seq[i] = mutated_seq[i], mutated_seq[mid_plane]
+                        break
+            else:
+                for i in reversed(range(mid_plane)):
+                    if abs(mutated_seq[i]) == 45:
+                        mutated_seq[mid_plane], mutated_seq[i] = mutated_seq[i], mutated_seq[mid_plane]
+                        break
+
+        # Rule 6: Swap closest plies to mid-plane that are both θ° or -θ°
+        if np.random.random() < mut_rate:
+            for i in range(mid_plane-1):
+                if abs(mutated_seq[i]) == abs(mutated_seq[i+1]):
                     mutated_seq[i], mutated_seq[i+1] = mutated_seq[i+1], mutated_seq[i]
-                else:
-                    mutated_seq[i], mutated_seq[i-1] = mutated_seq[i-1], mutated_seq[i]
-                    
-    # Rule 8: Move 0° plies at the surface closer to the middle of the sequence
-    if 0 in mutated_seq:
-        surface = mutated_seq.index(0)
-        if surface < 3:
-            for i in range(surface+1, len(sequence)):
-                if mutated_seq[i] == 0 and i - surface >= 3:
-                    # Swap the current 0° ply with the ply 3 positions closer to the middle
-                    middle = len(mutated_seq) // 2
-                    swap_index = max(surface+2, middle)
-                    mutated_seq[swap_index], mutated_seq[i] = mutated_seq[i], mutated_seq[swap_index]
                     break
-                elif mutated_seq[i] != 0:
+            for i in reversed(range(mid_plane+1, len(sequence)-1)):
+                if abs(mutated_seq[i]) == abs(mutated_seq[i+1]):
+                    mutated_seq[i], mutated_seq[i+1] = mutated_seq[i+1], mutated_seq[i]
                     break
+
+        # Rule 7: Separate groups of tape plies of the same orientation with 45° plies
+        for i in range(1, len(sequence)-1):
+            if mutated_seq[i] == mutated_seq[i-1] and mutated_seq[i] == mutated_seq[i+1]:
+                if abs(mutated_seq[i-1]) + abs(mutated_seq[i+1]) == 90:
+                    if mutated_seq[i] == 0:
+                        mutated_seq[i], mutated_seq[i+1] = mutated_seq[i+1], mutated_seq[i]
+                    else:
+                        mutated_seq[i], mutated_seq[i-1] = mutated_seq[i-1], mutated_seq[i]
+
+        # Rule 8: Move 0° plies at the surface closer to the middle of the sequence
+        if 0 in mutated_seq:
+            surface = mutated_seq.index(0)
+            if surface < 3:
+                for i in range(surface+1, len(sequence)):
+                    if mutated_seq[i] == 0 and i - surface >= 3:
+                        # Swap the current 0° ply with the ply 3 positions closer to the middle
+                        middle = len(mutated_seq) // 2
+                        swap_index = max(surface+2, middle)
+                        mutated_seq[swap_index], mutated_seq[i] = mutated_seq[i], mutated_seq[swap_index]
+                        break
+                    elif mutated_seq[i] != 0:
+                        break
     return mutated_seq
 
 # Selection function (tournament selection)
@@ -235,13 +233,25 @@ def crossover(parent1, parent2, crossover_rate):
 
 # Initial population
 def generate_population(num_plies, pop_size):
-    return [[random.choice(DesignParameters.orientations) for _ in range(num_plies)] for _ in range(pop_size)]
+    """
+    This function generates the initial population of stacking sequences. To ensure 
+    a population with symmetryc layups, symmetry constraints is enforced by flipping the orientation of the i-th ply
+     if the (num_plies - i - 1)-th ply has the same orientation
+    """
+    population = []
+    for i in range(pop_size):
+        individual = [random.choice(DesignParameters.orientations) for _ in range(num_plies)]
+        for j in range(num_plies // 2):
+            if individual[j] == individual[num_plies - j - 1]:
+                individual[num_plies - j - 1] = random.choice(DesignParameters.orientations)
+        population.append(individual)
+    return population
 
 # Genetic Algorithm
 def genetic_sequence(number_of_plies, population_size, max_iterations, crossover_rate, mutation_rate):
     # Initial population
-    # population = [[random.choice(DesignParameters.orientations) for _ in range(number_of_plies)] for _ in range(population_size)]
     population = generate_population(number_of_plies, population_size)
+
     for i in range(max_iterations):
         # fitness value of each sequence
         fitnesses = [fitness_function(sequence) for sequence in population]
@@ -265,7 +275,7 @@ def genetic_sequence(number_of_plies, population_size, max_iterations, crossover
         # Apply mutations to the new population
         for j in range(population_size):
             if np.random.random() < mutation_rate:
-                new_population[j] = mutate(new_population[j], mutation_rate)
+                new_population[j] = mutate(new_population[j], mutation_rate,number_of_plies)
             # Replace the old population with the new population
         population = new_population
     
@@ -273,6 +283,6 @@ def genetic_sequence(number_of_plies, population_size, max_iterations, crossover
 
 if __name__ == "__main__":
     best_sequence= genetic_sequence(NUM_PLIES, POP_SIZE, NUM_ITERATIONS, CROSSOVER_RATE, MUTATION_RATE)
-    print(f'Best fitness = {fitness_function(best_sequence)}, Best sequence = {best_sequence}')
+    print(f'Best fitness = {fitness_function(best_sequence)}, Best sequence = {best_sequence}, Sequence Length: {len(best_sequence)}')
 
 
