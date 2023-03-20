@@ -32,20 +32,30 @@ class DesignParameters:
     max_group_size: int = 3 # maximum number of consecutive plies with the same orientation
     max_imbalance: int = 2 # maximum difference between the number of plies with 0° and 90°
 
+@dataclass(frozen=False)
+class GAdefault:
+    n_plies: int = 16 #default number of plies
+    population_size: int = 150 # default population size
+    maximum_iterations: int = 1000 # default maximum number of iterations
+    mutation_rate: float = .1 # default mutation rate
+    cros_rate: float = .7 # defautl crossover rate
+    penalty_factor: float = 2 #  penalty weight to use in fitness function
+
+
 parser= argparse.ArgumentParser()
 
 # Number of plies in each stacking sequence
-parser.add_argument('--num_plies', type=int, required=True, help="int: number of plies in the stacking sequence")
+parser.add_argument('--num_plies', type=int, required=False, default=GAdefault.n_plies, help="int: number of plies in the stacking sequence")
 
 # Mutation and Crossover rate 
-parser.add_argument('--mut_rate', type=np.float64, required=False, default=.1, help="float: mutation rate")
-parser.add_argument('--cross_rate', type=np.float64, required=False, default=.7, help="float: crossover rate")
+parser.add_argument('--mut_rate', type=np.float64, required=False, default=GAdefault.mutation_rate, help="float: mutation rate")
+parser.add_argument('--cross_rate', type=np.float64, required=False, default=GAdefault.cros_rate, help="float: crossover rate")
 
 # Population size, max number of iterations
-parser.add_argument('--pop_size', type=int, required=False, default=150, help="int: maximum number of stackings generated")
-parser.add_argument('--num_iter', type=int, required=False, default=1000, help="int: maximum number of iterations")
+parser.add_argument('--pop_size', type=int, required=False, default=GAdefault.population_size, help="int: maximum number of stackings generated")
+parser.add_argument('--num_iter', type=int, required=False, default=GAdefault.maximum_iterations, help="int: maximum number of iterations")
 
-# Parse the argument
+# Parse the arguments
 args=parser.parse_args()
 NUM_PLIES = int(args.num_plies)
 MUTATION_RATE = np.float64(args.mut_rate)
@@ -54,8 +64,14 @@ POP_SIZE = int(args.pop_size)
 NUM_ITERATIONS = int(args.num_iter)
 
 # fitness function
-# Note: symmetry needs to be enforced
 def fitness_function(sequence):
+    """
+    Fitness Function. Each sequence is evaluated against the set of rules and a fitness score is return.
+    Arguments:
+    sequence: list, stacking sequence of the laminate.
+    Returns:
+    fitness: float, fitness score of the sequence.
+    """
     # Rule 1: Symmetry check respect to mid-plane
     symmetry_penalty = 0
     for i in range(len(sequence)//2):
@@ -63,22 +79,22 @@ def fitness_function(sequence):
             symmetry_penalty += 1
 
     # Rule 2: Calculate the percentage of each orientation
-    counts = {o: sequence.count(o) for o in DesignParameters.orientations}
-    for o in DesignParameters.orientations:
-        if counts[o] / len(sequence) < DesignParameters.min_percentage:
+    counts = {orientation: sequence.count(orientation) for orientation in DesignParameters.orientations}
+    for orientation in DesignParameters.orientations:
+        if counts[orientation] / len(sequence) < DesignParameters.min_percentage:
             return 0
-    percentages = {o: counts[o] / len(sequence) for o in DesignParameters.orientations}
+    percentages = {orientation: counts[orientation] / len(sequence) for orientation in DesignParameters.orientations}
     
     # Rule 3: Calculate the number of groupings of plies with the same orientation
     groups = 0
     last_orientation = None
     group_size = 0
-    for o in sequence:
-        if o == last_orientation:
+    for orientation in sequence:
+        if orientation == last_orientation:
             group_size += 1
         else:
             groups += max(0, group_size - 1)
-            last_orientation = o
+            last_orientation = orientation
             group_size = 1
     groups += max(0, group_size - 1)
     
@@ -97,37 +113,37 @@ def fitness_function(sequence):
     # Rule 6: Penalty for not alternating +45° and -45° plies
     alternating_penalty = 0
     last_angle = None
-    for o in sequence:
-        if o in {45, -45}:
+    for orientation in sequence:
+        if orientation in {45, -45}:
             if last_angle is None:
-                last_angle = o
-            elif last_angle == -o:
-                last_angle = o
+                last_angle = orientation
+            elif last_angle == -orientation:
+                last_angle = orientation
             else:
                 alternating_penalty += 1
-        elif o == 0 or o == 90:
+        elif orientation == 0 or orientation == 90:
             last_angle = None
             
     # Rule 7: Penalty for grouping tape plies with the same orientation without a 45° ply in between
     grouping_penalty = 0
     last_orientation = None
     last_group_size = 0
-    for o in sequence:
-        if o == last_orientation:
+    for orientation in sequence:
+        if orientation == last_orientation:
             last_group_size += 1
         else:
             if last_group_size > 1 and last_orientation is not None:
-                if sequence.index(o) - last_group_size < 0:
+                if sequence.index(orientation) - last_group_size < 0:
                     before = 45
                 else:
-                    before = sequence[sequence.index(o) - last_group_size - 1]
-                if sequence.index(o) + 1 >= len(sequence):
+                    before = sequence[sequence.index(orientation) - last_group_size - 1]
+                if sequence.index(orientation) + 1 >= len(sequence):
                     after = 45
                 else:
-                    after = sequence[sequence.index(o) + 1]
+                    after = sequence[sequence.index(orientation) + 1]
                 if abs(before - last_orientation) != 45 and abs(after - last_orientation) != 45:
                     grouping_penalty += 1
-            last_orientation = o
+            last_orientation = orientation
             last_group_size = 1
     if last_group_size > 1 and last_orientation is not None:
         if abs(sequence[sequence.index(last_orientation) - last_group_size] - last_orientation) != 45:
@@ -143,7 +159,7 @@ def fitness_function(sequence):
                 surface_penalty += 1
     
     # Calculate the fitness value
-    fitness = 1 / (1 + symmetry_penalty*2 + percentages[0] + percentages[45] + percentages[-45] + percentages[90] + groups +
+    fitness = 1 / (1 + symmetry_penalty*GAdefault.penalty_factor + percentages[0] + percentages[45] + percentages[-45] + percentages[90] + groups +
                    imbalance + edge_penalty + grouping_penalty + surface_penalty)
 
     return fitness
